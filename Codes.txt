@@ -1,0 +1,144 @@
+
+Procedures:
+1)AddCustomer - is where we store human information in customer:
+
+create or replace PROCEDURE addCustomer(c_id customer.cust_id%type,
+c_name customer.cust_name%type,
+c_cont customer.cust_contact%type,
+c_ema customer.cust_email%type,
+c_add customer.cust_address%type)
+IS
+BEGIN
+INSERT INTO customer (cust_id, cust_name, cust_contact, cust_email, cust_address)
+VALUES(c_id, c_name, c_cont, c_ema, c_add);
+END;
+/
+
+
+
+2)DelCustomer - this is what we have, destroying a person from a customer:
+
+create or replace PROCEDURE delCustomer(c_id customer.cust_id%type) IS
+BEGIN
+DELETE FROM customer
+WHERE cust_id = c_id;
+END;
+/
+
+
+
+
+3)Get Total-it calculates the income received to us:
+
+create or replace PROCEDURE gettotal(total_revenue OUT NUMBER)
+AS
+BEGIN
+  SELECT SUM(pay_amt) INTO total_revenue
+  FROM payment;
+END;
+/
+
+
+
+---------------------------------------------------------------------------------------------------------------------------
+
+
+
+Functions:
+
+
+1)prod_catalog - this means that we know the price of the product by selecting the customer id:
+
+create or replace FUNCTION prod_catalog(p_id product.prod_id%type)
+RETURN product.prod_price%type
+IS
+  p_price product.prod_name%type;
+BEGIN
+    SELECT prod_price into p_price
+    FROM product
+    where prod_id = p_id;
+
+  RETURN p_price;
+END;
+/
+
+
+
+
+2)totalCustomer - with this we will know how many times the customer has ordered:
+
+create or replace FUNCTION totalCustomer(c_id order_details.cust_id%type) 
+RETURN number IS 
+   total number; 
+BEGIN 
+   SELECT count(*) into total 
+   FROM order_details
+   where cust_id = c_id; 
+    
+   RETURN total; 
+END;
+/
+
+
+
+-----------------------------------------------------------------------------------------------------------------
+
+
+Triggers:
+
+1) ODT - after insert order_details calculate the sum of the received order, gives a certificate of when it was made and sends an order to the company to replenish the product if the product is less than 10.
+
+create or replace trigger "FTT"
+after
+insert on "FIRM"
+for each row
+begin
+    update product set prod_qty = 50 where product.prod_id = :new.prod_id;
+    insert into payment values (:new.total_amt * 9, sysdate, 0 - (:new.total_amt * 0.9));
+end;
+/
+
+
+
+2)FTT-after insert on firm calculates the sum of the order received by the firm and sends it to payment and fills in the product.
+
+create or replace trigger odt
+after insert on ORDER_DETAILS
+for each row
+DECLARE
+    n number(10);
+    price number(10);
+    name  varchar(100);
+begin
+    select prod_qty into n from product where product.prod_id = :new.prod_id; -- prod_qty 
+    select prod_price into price from product where product.prod_id = :new.prod_id;
+    select prod_name into name from product where product.prod_id = :new.prod_id;
+    update product set prod_qty = n - :new.prod_qty where product.prod_id = :new.prod_id;
+    insert into payment values (:new.orddet_id * 10, sysdate, :new.prod_qty * price);
+    if n < 10 then 
+    insert into firm values (name, 50 - n, :new.prod_id,((50 - n)*(0.9 * price)), 123*:new.prod_id); 
+    end if;
+    insert into orders values (:new.orddet_id, sysdate, :new.cust_id, price);
+end;
+/
+
+
+
+3)ORT - after insert table puts the returned goods in their place, along with the money.
+
+after
+insert or update or delete on "ORDER_RETURN"
+for each row
+declare
+    price number(10);
+begin
+    select prod_price into price from product where product.prod_id = :new.prod_id; -- prod_qty dy n-ge tenestiremiz
+    insert into payment values ((price * :new.prod_qty) / 10, sysdate, 0 - (price * :new.prod_qty));
+    update product set product.prod_qty = product.prod_qty + :new.prod_qty where product.prod_id = :new.prod_id;
+end;
+/
+
+
+
+
+
